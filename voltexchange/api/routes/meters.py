@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Any, Dict
 import json
-from database import get_connection
+from api.database import get_connection
 
 router = APIRouter()
 

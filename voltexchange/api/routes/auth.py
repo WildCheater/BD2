@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 import bcrypt
-from database import get_connection
+from api.database import get_connection
 
 router = APIRouter()
 

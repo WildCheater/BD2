@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routes import auth, meters, market, admin
+from api.routes import auth, meters, market, admin
 
 app = FastAPI(title="VoltExchange API")
 
