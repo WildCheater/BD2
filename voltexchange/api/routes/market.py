@@ -18,6 +18,7 @@ class OrderRequest(BaseModel):
 def compra_direta(body: BuyRequest):
     """Compra imediata — chama sp_ExecutarCompraDireta (ACID)"""
     conn = get_connection()
+    conn.autocommit = True
     try:
         with conn.cursor() as cur:
             # Prepared Statement — parâmetros passados separadamente
