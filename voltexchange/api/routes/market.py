@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Header, Depends
 from pydantic import BaseModel
 from api.database import get_connection
 
@@ -13,21 +13,30 @@ class OrderRequest(BaseModel):
     quantidade_kwh: float
     preco_maximo: float
 
+def get_current_user(authorization: str = Header(None)):
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Token ausente.")
+    try:
+        token = authorization.split(" ")[1] # Remove "Bearer "
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        return int(payload["sub"])
+    except Exception:
+        raise HTTPException(status_code=401, detail="Token inválido ou expirado.")
+
 @router.post("/buy")
-def compra_direta(body: BuyRequest):
-    """Compra imediata — chama sp_ExecutarCompraDireta (ACID)"""
+def compra_direta(body: BuyRequest, user_id: int = Depends(get_current_user)):
+    """O comprador_id agora vem do token (user_id)"""
     conn = get_connection()
-    # Ativa autocommit para permitir COMMIT/ROLLBACK dentro da procedure
     conn.autocommit = True 
     try:
         with conn.cursor() as cur:
+            # Usamos o user_id extraído do token por segurança
             cur.execute(
                 "CALL sp_ExecutarCompraDireta(%s, %s)",
-                (body.oferta_id, body.comprador_id)
+                (body.oferta_id, user_id)
             )
             return {"message": "Compra realizada com sucesso."}
     except Exception as e:
-        # No modo autocommit, o rollback é gerido pela procedure ou automático em erro
         raise HTTPException(status_code=400, detail=str(e))
     finally:
         conn.close()
