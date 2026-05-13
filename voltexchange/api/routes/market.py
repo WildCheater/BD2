@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Header, Depends
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from api.database import get_connection
 
@@ -13,41 +13,34 @@ class OrderRequest(BaseModel):
     quantidade_kwh: float
     preco_maximo: float
 
-def get_current_user(authorization: str = Header(None)):
-    if not authorization:
-        raise HTTPException(status_code=401, detail="Token ausente.")
-    try:
-        token = authorization.split(" ")[1] # Remove "Bearer "
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        return int(payload["sub"])
-    except Exception:
-        raise HTTPException(status_code=401, detail="Token inválido ou expirado.")
 
 @router.post("/buy")
-def compra_direta(body: BuyRequest, user_id: int = Depends(get_current_user)):
-    """O comprador_id agora vem do token (user_id)"""
+def compra_direta(body: BuyRequest):
+    """Compra imediata — chama sp_ExecutarCompraDireta (ACID)"""
     conn = get_connection()
-    conn.autocommit = True 
     try:
         with conn.cursor() as cur:
-            # Usamos o user_id extraído do token por segurança
+            # Prepared Statement — parâmetros passados separadamente
             cur.execute(
                 "CALL sp_ExecutarCompraDireta(%s, %s)",
-                (body.oferta_id, user_id)
+                (body.oferta_id, body.comprador_id)
             )
+            conn.commit()
             return {"message": "Compra realizada com sucesso."}
     except Exception as e:
+        conn.rollback()
         raise HTTPException(status_code=400, detail=str(e))
     finally:
         conn.close()
 
+
 @router.post("/order")
 def criar_ordem(body: OrderRequest):
-    """Cria uma intenção de compra futura — INSERT simples (sem COMMIT interno na DB)"""
+    """Cria uma intenção de compra futura em OrdensCompra"""
     conn = get_connection()
-    # Aqui mantemos o comportamento padrão (autocommit=False) para garantir o commit manual do Python
     try:
         with conn.cursor() as cur:
+            # Prepared Statement
             cur.execute(
                 """
                 INSERT INTO OrdensCompra (CompradorID, QuantidadeKWh, PrecoMaximo, Estado, DataCriacao)
@@ -56,9 +49,7 @@ def criar_ordem(body: OrderRequest):
                 """,
                 (body.comprador_id, body.quantidade_kwh, body.preco_maximo)
             )
-            # Acede ao resultado (garante que os nomes das colunas batem com o teu esquema adaptado)
-            result = cur.fetchone()
-            ordem_id = result["ordemid"] if isinstance(result, dict) else result[0]
+            ordem_id = cur.fetchone()["ordemid"]
             conn.commit()
             return {"message": "Ordem de compra criada.", "ordem_id": ordem_id}
     except Exception as e:
@@ -67,16 +58,18 @@ def criar_ordem(body: OrderRequest):
     finally:
         conn.close()
 
+
 @router.post("/match")
 def executar_matching():
-    """Dispara o sp_MatchingEngine — Necessário autocommit se houver COMMITs na procedure"""
+    """Dispara manualmente o sp_MatchingEngine — obrigatório para testes do docente"""
     conn = get_connection()
-    conn.autocommit = True 
     try:
         with conn.cursor() as cur:
             cur.execute("CALL sp_MatchingEngine()")
+            conn.commit()
             return {"message": "Matching Engine executado com sucesso."}
     except Exception as e:
+        conn.rollback()
         raise HTTPException(status_code=400, detail=str(e))
     finally:
         conn.close()

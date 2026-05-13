@@ -1,8 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 import bcrypt
-import jwt
-import datetime
 from api.database import get_connection
 
 router = APIRouter()
@@ -40,34 +38,25 @@ def register(body: RegisterRequest):
         conn.close()
 
 
-SECRET_KEY ="BD2_PROJETO_2026"
-ALGORITHM = "HS256"
-
 @router.post("/login")
 def login(body: LoginRequest):
     conn = get_connection()
     try:
         with conn.cursor() as cur:
+            # Prepared Statement — evita SQL Injection
             cur.execute(
                 "SELECT UtilizadorID, PasswordHash FROM Utilizadores WHERE Email = %s",
                 (body.email,)
             )
             user = cur.fetchone()
 
-            if not user or not bcrypt.checkpw(body.password.encode(), user["passwordhash"].encode()):
+            if not user:
                 raise HTTPException(status_code=401, detail="Email ou password incorretos.")
 
-            # O payload contém o ID do utilizador (sub) e a expiração (exp)
-            payload = {
-                "sub": str(user["utilizadorid"]),
-                "exp": datetime.datetime.utcnow() + datetime.timedelta(hours=8)
-            }
-            token = jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+            # Verificar password com bcrypt
+            if not bcrypt.checkpw(body.password.encode(), user["passwordhash"].encode()):
+                raise HTTPException(status_code=401, detail="Email ou password incorretos.")
 
-            return {
-                "access_token": token,
-                "token_type": "bearer",
-                "utilizador_id": user["utilizadorid"]
-            }
+            return {"message": "Login bem-sucedido.", "utilizador_id": user["utilizadorid"]}
     finally:
         conn.close()
