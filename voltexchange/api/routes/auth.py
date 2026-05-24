@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 import bcrypt
 from api.database import get_connection
+from api.auth_utils import create_token
 
 router = APIRouter()
 
@@ -30,7 +31,8 @@ def register(body: RegisterRequest):
             )
             user_id = cur.fetchone()["utilizadorid"]
             conn.commit()
-            return {"message": "Utilizador criado com sucesso.", "utilizador_id": user_id}
+            token = create_token(user_id)
+            return {"message": "Utilizador criado com sucesso.", "utilizador_id": user_id, "token": token}
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=400, detail=str(e))
@@ -57,6 +59,8 @@ def login(body: LoginRequest):
             if not bcrypt.checkpw(body.password.encode(), user["passwordhash"].encode()):
                 raise HTTPException(status_code=401, detail="Email ou password incorretos.")
 
-            return {"message": "Login bem-sucedido.", "utilizador_id": user["utilizadorid"]}
+            token = create_token(user["utilizadorid"])
+            return {"message": "Login bem-sucedido.", "utilizador_id": user["utilizadorid"], "token": token}
     finally:
         conn.close()
+

@@ -1,21 +1,20 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from api.database import get_connection
+from api.auth_utils import get_current_user
 
 router = APIRouter()
 
 class BuyRequest(BaseModel):
     oferta_id: int
-    comprador_id: int
 
 class OrderRequest(BaseModel):
-    comprador_id: int
     quantidade_kwh: float
     preco_maximo: float
 
 
 @router.post("/buy")
-def compra_direta(body: BuyRequest):
+def compra_direta(body: BuyRequest, utilizador_id: int = Depends(get_current_user)):
     """Compra imediata — chama sp_ExecutarCompraDireta (ACID)"""
     conn = get_connection()
     conn.autocommit = True
@@ -24,7 +23,7 @@ def compra_direta(body: BuyRequest):
             # Prepared Statement — parâmetros passados separadamente
             cur.execute(
                 "CALL sp_ExecutarCompraDireta(%s, %s)",
-                (body.oferta_id, body.comprador_id)
+                (body.oferta_id, utilizador_id)
             )
             conn.commit()
             return {"message": "Compra realizada com sucesso."}
@@ -36,7 +35,7 @@ def compra_direta(body: BuyRequest):
 
 
 @router.post("/order")
-def criar_ordem(body: OrderRequest):
+def criar_ordem(body: OrderRequest, utilizador_id: int = Depends(get_current_user)):
     """Cria uma intenção de compra futura em OrdensCompra"""
     conn = get_connection()
     try:
@@ -48,7 +47,7 @@ def criar_ordem(body: OrderRequest):
                 VALUES (%s, %s, %s, 'PENDENTE', NOW())
                 RETURNING OrdemID
                 """,
-                (body.comprador_id, body.quantidade_kwh, body.preco_maximo)
+                (utilizador_id, body.quantidade_kwh, body.preco_maximo)
             )
             ordem_id = cur.fetchone()["ordemid"]
             conn.commit()
@@ -74,3 +73,4 @@ def executar_matching():
         raise HTTPException(status_code=400, detail=str(e))
     finally:
         conn.close()
+

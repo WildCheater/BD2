@@ -28,7 +28,6 @@ CREATE OR REPLACE TRIGGER trg_verificar_anomalia
     FOR EACH ROW
     EXECUTE FUNCTION fn_verificar_anomalia();
 
-
 -- ------------------------------------------------------------
 -- TRIGGER 2: Proteção de Utilizadores
 --   Impede DELETE se saldo > 0 ou ofertas ATIVAS
@@ -59,7 +58,6 @@ CREATE OR REPLACE TRIGGER trg_proteger_utilizador
     BEFORE DELETE ON Utilizadores
     FOR EACH ROW
     EXECUTE FUNCTION fn_proteger_utilizador();
-
 
 -- ------------------------------------------------------------
 -- STORED PROCEDURE: sp_ExecutarCompraDireta
@@ -130,7 +128,6 @@ BEGIN
 END;
 $$;
 
-
 -- ------------------------------------------------------------
 -- STORED PROCEDURE: sp_MatchingEngine
 --   Cruza OrdensCompra com OfertasVenda
@@ -177,7 +174,6 @@ BEGIN
 END;
 $$;
 
-
 -- ------------------------------------------------------------
 -- STORED PROCEDURE: sp_QuarentenaUtilizador
 -- ------------------------------------------------------------
@@ -212,3 +208,27 @@ EXCEPTION
         RAISE; 
 END;
 $$;
+
+-- ------------------------------------------------------------
+-- TRIGGER 3: Event-Driven Matching (Desafio Excelência)
+--   Dispara o matching engine automaticamente ao inserir novas ordens ou ofertas
+-- ------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION fn_trigger_matching_engine()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- O Matching Engine processa todas as pendentes
+    CALL sp_MatchingEngine();
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE TRIGGER trg_match_ordens
+    AFTER INSERT ON OrdensCompra
+    FOR EACH STATEMENT
+    EXECUTE FUNCTION fn_trigger_matching_engine();
+
+CREATE OR REPLACE TRIGGER trg_match_ofertas
+    AFTER INSERT ON OfertasVenda
+    FOR EACH STATEMENT
+    EXECUTE FUNCTION fn_trigger_matching_engine();
